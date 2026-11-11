@@ -1,0 +1,15 @@
+:root{
+  color-scheme:dark;
+  --bg-0:#080c0b;--bg-1:#0c1210;--bg-2:#111816;--bg-3:#16201d;--bg-4:#1c2824;
+  --line:#1e2a26;--line-2:#2a3a35;--line-3:#38504a;
+  --tx-0:#e6efeb;--tx-1:#b4c4bd;--tx-2:#7d9189;--tx-3:#526660;
+  --em:#10d9a0;--em-2:#34e8b4;--em-dim:#0c8f6b;--em-bg:rgba(16,217,160,.1);--em-line:rgba(16,217,160,.35);
+  --crit:#ff5d6c;--high:#ff9248;--med:#f2c744;--low:#4cc2ff;--info:#8aa0aa;--ok:#10d9a0;
+  --r-1:4px;--r-2:6px;--r-3:10px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;
+  --f-ui:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --f-mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --fs-0:11px;--fs-1:12px;--fs-2:13px;--fs-3:15px;--fs-4:18px;
+  --sidebar-w:200px;--topbar-h:48px;--status-h:26px;
+  --shadow-1:0 1px 0 rgba(255,255,255,.02) inset,0 8px 24px -12px rgba(0,0,0,.7);
+}

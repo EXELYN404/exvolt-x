@@ -1,0 +1,6 @@
+# EXVOLT X - dependensi runtime (semua open-source, tanpa layanan berbayar)
+starlette>=0.37        # framework ASGI (fondasi FastAPI): routing, WebSocket, static files
+uvicorn>=0.29          # server ASGI
+websockets>=12.0       # transport WebSocket native untuk uvicorn (tanpa ini UI otomatis memakai SSE)
+cryptography>=42.0     # CA lokal & sertifikat per-host untuk intersepsi HTTPS
+PyYAML>=6.0            # config.yaml

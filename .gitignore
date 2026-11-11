@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+data/*
+!data/.gitkeep
+certificates/*
+!certificates/.gitkeep
+.pytest_cache/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp
+*backup*
+*.zip
+
+# Local secrets
+.env
+.env.*
+!.env.example

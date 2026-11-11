@@ -1,0 +1,698 @@
+==================================================
+EXVOLT X - SOURCE AUDIT
+==================================================
+
+=== GIT STATUS ===
+
+=== PROJECT STRUCTURE ===
+./.gitignore
+./LICENSE
+./README.md
+./SECURITY.md
+./certificates/.gitkeep
+./config.yaml
+./config.yaml.bak
+./data/.gitkeep
+./data/exvolt.db-shm
+./data/exvolt.db-wal
+./exvolt-audit.txt
+./exvolt/__init__.py
+./exvolt/__pycache__/__init__.cpython-313.pyc
+./exvolt/api/__init__.py
+./exvolt/api/app.py
+./exvolt/api/security.py
+./exvolt/core/__init__.py
+./exvolt/core/certificate_manager.py
+./exvolt/core/database.py
+./exvolt/core/event_bus.py
+./exvolt/core/guard.py
+./exvolt/core/http_client.py
+./exvolt/core/proxy_engine.py
+./exvolt/core/scope_manager.py
+./exvolt/core/session_manager.py
+./exvolt/core/settings.py
+./exvolt/modules/__init__.py
+./exvolt/modules/comparer.py
+./exvolt/modules/decoder.py
+./exvolt/modules/intruder.py
+./exvolt/modules/repeater.py
+./exvolt/modules/reporting.py
+./exvolt/modules/scanner.py
+./exvolt/modules/sequencer.py
+./exvolt/utils/__init__.py
+./exvolt/utils/httpmsg.py
+./main.py
+./requirements-dev.txt
+./requirements.txt
+./tests/conftest.py
+./tests/test_api_security.py
+./tests/test_comparer.py
+./tests/test_decoder.py
+./tests/test_frontend_smoke.py
+./tests/test_proxy.py
+./tests/test_repeater_intruder.py
+./tests/test_scanner.py
+./tests/test_scope.py
+./tests/test_sequencer_session_report.py
+./web/favicon.svg
+./web/index.html
+
+=== PYTHON DEPENDENCIES ===
+# EXVOLT X - dependensi runtime (semua open-source, tanpa layanan berbayar)
+starlette>=0.37        # framework ASGI (fondasi FastAPI): routing, WebSocket, static files
+uvicorn>=0.29          # server ASGI
+websockets>=12.0       # transport WebSocket native untuk uvicorn (tanpa ini UI otomatis memakai SSE)
+cryptography>=42.0     # CA lokal & sertifikat per-host untuk intersepsi HTTPS
+PyYAML>=6.0            # config.yaml
+
+=== PYTHON ENTRYPOINT ===
+#!/usr/bin/env python3
+"""EXVOLT X - Web Security Testing Platform (EXELYN404). Jalankan: python3 main.py"""
+import argparse
+import sys
+
+if sys.version_info < (3, 10):
+    sys.exit("EXVOLT X membutuhkan Python 3.10 atau lebih baru.")
+
+try:
+    import uvicorn
+    import yaml  # noqa: F401
+    import cryptography  # noqa: F401
+    import starlette  # noqa: F401
+except ImportError as exc:
+    sys.exit(f"Dependensi belum terpasang ({exc.name}). Jalankan: pip install -r requirements.txt")
+
+from exvolt import __version__
+from exvolt.api.app import create_app
+from exvolt.core.settings import Settings, is_loopback
+
+
+def main():
+    ap = argparse.ArgumentParser(description="EXVOLT X - platform pengujian keamanan web")
+    ap.add_argument("--host", help="alamat bind UI (default dari config.yaml: 127.0.0.1)")
+    ap.add_argument("--port", type=int, help="port UI (default 8080)")
+    ap.add_argument("--config", help="path config.yaml")
+    args = ap.parse_args()
+    try:
+        settings = Settings(args.config)
+        patch = {}
+        if args.host:
+            patch["host"] = args.host
+        if args.port:
+            patch["port"] = args.port
+        if patch:
+            settings.update({"server": patch}, persist=False)
+    except (RuntimeError, ValueError) as exc:
+        sys.exit(f"Konfigurasi tidak valid: {exc}")
+    host, port = settings.get("server.host"), settings.get("server.port")
+    if not is_loopback(host) and not settings.get("server.auth_token"):
+        sys.exit("Menolak bind non-localhost tanpa autentikasi. Setel server.auth_token (min. 16 karakter) di config.yaml.")
+    print(f"EXVOLT X {__version__} oleh EXELYN404\nUI: http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}")
+    uvicorn.run(create_app(settings), host=host, port=port, log_level="warning", ws_ping_interval=None)
+
+
+if __name__ == "__main__":
+    main()
+
+=== PYTHON CLASSES & FUNCTIONS ===
+
+--- exvolt/modules/__init__.py ---
+
+--- exvolt/modules/comparer.py ---
+9:def _norm(text, ws, case):
+15:def text_diff(a: str, b: str, ignore_ws=False, ignore_case=False):
+37:def _walk(a, b, path, out, ignore_case):
+63:def json_diff(a: str, b: str, ignore_case=False):
+73:def compare(a: str, b: str, mode="text", ignore_ws=False, ignore_case=False):
+83:def export_html(result: dict, title="Hasil Perbandingan EXVOLT X") -> str:
+
+--- exvolt/modules/reporting.py ---
+17:def iso(ts):
+21:class Reporting:
+22:    def __init__(self, settings, db, scope):
+27:    def findings(self, severities=None, host=None, in_scope_only=False):
+38:    def build(self, title, severities=None, in_scope_only=False):
+53:    def render_html(self, rep):
+80:    def generate(self, title, severities=None, in_scope_only=False):
+91:    def list(self):
+96:    def file_for(self, rid, kind):
+104:    def delete(self, rid):
+114:    def export_entries(self, ids, fmt="json"):
+144:    def export_evidence(self, finding_id):
+
+--- exvolt/modules/sequencer.py ---
+13:class SequencerError(ValueError):
+17:def extract_from_row(row, kind, name):
+41:def shannon(s: str) -> float:
+49:def _erfc(x):
+53:def analyze(tokens: list[str]):
+115:def _to_bits(tokens):
+134:def _as_int(t):
+141:def _common_prefix(tokens):
+149:class Sequencer:
+150:    def __init__(self, db, bus):
+154:    def create(self, name, source):
+159:    def sets(self):
+163:    def add_tokens(self, name, tokens, hid=None):
+171:    def tokens(self, name, limit=100000):
+174:    def delete(self, name):
+179:    def start_live(self, name, kind, extract):
+190:    def stop_live(self, name):
+193:    def hook(self, hid, row):
+
+--- exvolt/modules/decoder.py ---
+29:class DecoderError(ValueError):
+33:def _b64pad(s):
+38:def _jwt(text):
+60:def transform(op: str, direction: str, text: str) -> str:
+
+--- exvolt/modules/intruder.py ---
+20:class IntruderError(ValueError):
+24:class RateLimiter:
+25:    def __init__(self, rps):
+28:    def wait(self, stop: threading.Event):
+40:def split_template(template: str):
+47:def generate(mode, n_pos, lists, cap):
+70:def estimate(mode, n_pos, lists):
+83:class Attack:
+84:    def __init__(self, aid, cfg, total):
+93:    def summary(self):
+98:class IntruderManager:
+99:    def __init__(self, settings, guard, bus):
+105:    def _limits(self):
+109:    def start(self, req: dict):
+160:    def _build_probe(raw, scheme, host, port):
+167:    def _render(self, att, combo):
+175:    def _run(self, att, combos):
+181:        def one(idx_combo):
+226:    def stop(self, aid):
+235:    def get(self, aid):
+239:    def export(att, fmt="csv"):
+252:def _expected_netloc(c):
+257:def build_from_raw_safe(raw, c):
+
+--- exvolt/modules/repeater.py ---
+13:class RepeaterError(ValueError):
+17:def build_from_raw(raw_text: str, scheme: str, host: str, port: int | None):
+37:class Repeater:
+38:    def __init__(self, db, settings, guard, bus):
+41:    def send(self, method, url, headers, body: bytes, follow_redirects=False, timeout=None, verify=None, tab=None):
+85:    def _log(self, d):
+89:    def log(self):
+93:    def save(self, name, data):
+97:    def saved(self):
+101:    def delete_saved(self, rid):
+
+--- exvolt/modules/scanner.py ---
+34:def _snippet(text, m, width=80):
+39:class PassiveScanner:
+40:    def __init__(self, db, bus, settings):
+44:    def _add(self, row, name, severity, confidence, description, evidence, remediation, key):
+57:    def analyze_id(self, hid):
+61:    def analyze(self, row) -> int:
+207:    def tls_probe(self, host, port=443, timeout=10):
+236:        def add(name, sev, conf, desc, ev, rem, key):
+261:def _is_private_host(host):
+
+--- exvolt/__init__.py ---
+
+--- exvolt/api/__init__.py ---
+
+--- exvolt/api/security.py ---
+19:def _hdr(scope, name):
+27:def host_only(hostport: str) -> str:
+34:class SecurityMiddleware:
+35:    def __init__(self, app, settings):
+38:    def token(self):
+41:    def authed(self, scope):
+57:    def host_ok(self, scope):
+66:    async def __call__(self, scope, receive, send):
+90:        async def send_wrapped(msg):
+101:    async def _deny(self, scope, receive, send, code, msg):
+
+--- exvolt/api/app.py ---
+45:class Ctx:
+48:    def __init__(self, settings: Settings):
+65:    def _scan_hook(self, hid, row):
+71:def run(fn, *a, **kw):
+75:async def body_json(request: Request, required=True):
+92:def need(d, key, typ=str, default=None):
+103:def api(fn):
+105:    async def wrapper(request: Request):
+122:def file_response(data, name, ctype):
+127:def parse_hdrs(s):
+134:def history_detail(r, include_bodies=True):
+161:def hist_query(request: Request):
+171:async def health(request, ctx):
+176:async def auth_status(request):
+185:async def login(request):
+202:async def overview(request, ctx):
+232:async def settings_get(request, ctx):
+237:async def settings_put(request, ctx):
+256:async def proxy_status(request, ctx):
+261:async def proxy_start(request, ctx):
+268:async def proxy_stop(request, ctx):
+274:async def proxy_intercept(request, ctx):
+282:async def proxy_queue(request, ctx):
+287:async def proxy_decide(request, ctx):
+300:async def proxy_logs(request, ctx):
+305:async def ca_download(request, ctx):
+313:async def ca_regen(request, ctx):
+324:async def history_list(request, ctx):
+330:async def history_get(request, ctx):
+338:async def history_delete_one(request, ctx):
+344:async def history_delete_many(request, ctx):
+356:async def history_export(request, ctx):
+371:async def hosts_list(request, ctx):
+377:async def repeater_send(request, ctx):
+393:async def repeater_log(request, ctx):
+398:async def repeater_saved(request, ctx):
+407:async def repeater_saved_delete(request, ctx):
+414:async def decoder_run(request, ctx):
+422:async def decoder_types(request, ctx):
+427:def _item_text(ctx, spec):
+441:async def comparer_compare(request, ctx):
+449:async def comparer_export(request, ctx):
+460:async def scope_list(request, ctx):
+465:async def scope_add(request, ctx):
+472:async def scope_patch(request, ctx):
+479:async def scope_delete(request, ctx):
+485:async def scope_check(request, ctx):
+492:async def scope_export(request, ctx):
+497:async def scope_import(request, ctx):
+504:async def scope_recompute(request, ctx):
+510:async def intruder_start(request, ctx):
+517:async def intruder_get(request, ctx):
+526:async def intruder_current(request, ctx):
+534:async def intruder_stop(request, ctx):
+540:async def intruder_export(request, ctx):
+551:async def scanner_findings(request, ctx):
+559:async def scanner_delete(request, ctx):
+568:async def scanner_rescan(request, ctx):
+569:    def work():
+579:async def scanner_tls(request, ctx):
+594:async def seq_sets(request, ctx):
+599:async def seq_live(request, ctx):
+608:async def seq_from_history(request, ctx):
+627:async def seq_manual(request, ctx):
+637:async def seq_analyze(request, ctx):
+645:async def seq_tokens(request, ctx):
+650:async def seq_delete(request, ctx):
+656:async def seq_export(request, ctx):
+669:async def ws_connections(request, ctx):
+676:async def ws_messages(request, ctx):
+699:async def ws_export(request, ctx):
+707:async def ws_clear(request, ctx):
+714:async def reports_list(request, ctx):
+719:async def reports_create(request, ctx):
+729:async def reports_download(request, ctx):
+740:async def reports_delete(request, ctx):
+746:async def evidence_export(request, ctx):
+755:async def sessions_list(request, ctx):
+761:async def sessions_save(request, ctx):
+767:async def sessions_load(request, ctx):
+774:async def sessions_delete(request, ctx):
+780:async def sessions_export(request, ctx):
+786:async def sessions_import(request, ctx):
+795:async def sessions_autosave_now(request, ctx):
+801:async def sessions_recover(request, ctx):
+807:async def ws_events(websocket: WebSocket):
+812:    async def reader():
+840:async def sse_events(request):
+845:    async def gen():
+862:async def index(request):
+866:async def not_found_api(request, exc):
+872:def create_app(settings: Settings | None = None) -> Starlette:
+877:    async def lifespan(app):
+
+--- exvolt/core/proxy_engine.py ---
+19:class ProxyError(Exception):
+24:async def read_head(reader):
+28:def parse_head(data: bytes):
+41:async def _consume_trailers(reader):
+48:async def iter_chunked(reader):
+65:async def iter_fixed(reader, n):
+74:async def iter_eof(reader):
+82:async def read_request_body(reader, headers):
+102:def split_hostport(target, default):
+115:class WsParser:
+118:    def __init__(self):
+122:    def feed(self, data):
+168:class Held:
+169:    def __init__(self, hid, scheme, host, port, raw, encoding, loop):
+175:class ProxyEngine:
+176:    def __init__(self, settings, db, bus, scope, certs):
+189:    def running(self):
+192:    def status(self):
+197:    def log(self, level, msg):
+201:    async def start(self, host=None, port=None):
+219:    async def stop(self):
+241:    def set_intercept(self, enabled: bool):
+251:    def queue_list(self):
+255:    def decide(self, qid, action, raw_text=None):
+273:    async def _on_client(self, reader, writer):
+290:    async def _respond(self, writer, code, body: bytes, ctype="text/plain; charset=utf-8", extra=()):
+296:    async def _serve(self, reader, writer, scheme=None, host=None, port=None):
+336:    async def _info_page(self, writer, target):
+350:    def _ignored(self, host):
+353:    async def _connect(self, reader, writer, target):
+366:            async def pump(r, w):
+396:    async def _transaction(self, creader, cwriter, scheme, host, port, method, path, version, headers, body):
+564:    def _store(self, entry):
+574:    def _run_hook(self, hook, hid, row):
+581:    async def _ws_tunnel(self, creader, cwriter, ureader, uwriter, hid, host, url):
+584:        async def pump(r, w, direction):
+612:    def _store_ws(self, hid, direction, op, payload, host, url):
+
+--- exvolt/core/__init__.py ---
+
+--- exvolt/core/settings.py ---
+60:class Settings:
+61:    def __init__(self, path=None):
+72:    def load(self):
+86:    def save(self):
+97:    def get(self, dotted, default=None):
+105:    def snapshot(self, hide_secret=True):
+111:    def update(self, patch, persist=True):
+115:    def _apply(self, patch, validate_only=False, persist=False):
+139:    def _check(section, key, val):
+163:def is_loopback(host: str) -> bool:
+
+--- exvolt/core/guard.py ---
+9:class TargetGuard:
+10:    def __init__(self, settings, scope):
+13:    def check(self, url: str):
+
+--- exvolt/core/scope_manager.py ---
+14:class ScopeError(ValueError):
+18:def split_url(url: str):
+26:class ScopeManager:
+27:    def __init__(self, db):
+34:    def validate(rule: dict) -> dict:
+66:    def rules(self):
+72:    def _dirty(self):
+75:    def add(self, rule: dict) -> dict:
+82:    def update(self, rid: int, enabled: bool):
+87:    def delete(self, rid: int):
+92:    def clear(self):
+96:    def export(self):
+100:    def import_rules(self, data, replace=False):
+116:    def _match(rule, url, host, port):
+131:    def check(self, url: str):
+149:    def in_scope(self, url: str) -> bool:
+152:    def recompute_history(self):
+
+--- exvolt/core/database.py ---
+43:def _like(s: str) -> str:
+47:class Database:
+48:    def __init__(self, path):
+59:    def close(self):
+64:    def q(self, sql, params=()):
+68:    def one(self, sql, params=()):
+72:    def x(self, sql, params=()):
+79:    def tx(self):
+91:    def iterate(self, sql, params=(), batch=200):
+104:    def add_history(self, e: dict, max_entries=50000) -> int:
+116:    def trim_history(self, max_entries):
+123:    def get_history(self, hid):
+126:    def search_history(self, p: dict):
+169:    def delete_history(self, ids):
+
+--- exvolt/core/http_client.py ---
+13:class HttpClientError(Exception):
+17:class RequestHandle:
+20:    def __init__(self):
+24:    def cancel(self):
+39:def _once(method, url, headers, body, timeout, verify, max_bytes, handle):
+107:def send_request(method, url, headers, body=b"", timeout=30, verify=True, follow_redirects=False,
+
+--- exvolt/core/certificate_manager.py ---
+20:def _now():
+24:class CertificateManager:
+25:    def __init__(self, cert_dir):
+40:    def ca_pem_path(self):
+44:    def ca_key_path(self):
+47:    def load_or_create(self):
+54:    def regenerate(self):
+75:    def ca_pem(self) -> bytes:
+78:    def ca_der(self) -> bytes:
+81:    def info(self):
+87:    def _leaf(self, host: str):
+107:    def server_context(self, host: str) -> ssl.SSLContext:
+135:    def client_context(self, verify: bool) -> ssl.SSLContext:
+
+--- exvolt/core/event_bus.py ---
+9:class EventBus:
+10:    def __init__(self):
+15:    def bind_loop(self, loop):
+18:    def subscribe(self):
+23:    def unsubscribe(self, q):
+26:    def publish(self, type_, data=None):
+42:    def _push(self, ev):
+51:    def log(self, level, msg):
+
+--- exvolt/core/session_manager.py ---
+20:class SessionError(ValueError):
+24:def _safe_name(name: str) -> str:
+31:class SessionManager:
+32:    def __init__(self, settings, db, bus):
+44:    def _dump(self, meta=None):
+57:    def export_bytes(self, name="session"):
+61:    def parse(data: bytes):
+75:    def import_bytes(self, data: bytes, replace=True):
+109:    def _path(self, name):
+112:    def save(self, name):
+120:    def load(self, name, replace=True):
+128:    def delete(self, name):
+136:    def info(p: Path):
+140:    def list(self):
+144:    def autosave_once(self):
+157:    def autosaves(self):
+161:    def recover(self, name):
+181:    def start_autosave(self):
+187:    def _loop(self):
+199:    def shutdown(self):
+
+--- exvolt/utils/httpmsg.py ---
+22:def reason(code: int) -> str:
+29:def get_header(headers, name, default=None):
+37:def get_all(headers, name):
+42:def headers_to_text(headers, nl="\n"):
+46:def text_to_headers(text):
+61:def split_raw(raw: bytes):
+70:def parse_raw_request(raw: bytes):
+88:def build_raw_request(method, target, headers, body=b"", version="HTTP/1.1") -> bytes:
+93:def _inflate(data, wbits):
+101:def decode_body(headers, body: bytes):
+127:def hexdump(data: bytes, limit=8192) -> str:
+140:def render_body(body: bytes, content_type: str = ""):
+158:def pretty(text: str, content_type: str = "") -> str:
+
+--- exvolt/utils/__init__.py ---
+
+=== API ROUTES ===
+
+=== FRONTEND FILES ===
+web/assets/css/app.css
+web/assets/css/components.css
+web/assets/css/layout.css
+web/assets/css/tokens.css
+web/assets/js/api.js
+web/assets/js/app.js
+web/assets/js/components/ui.js
+web/assets/js/components/viewer.js
+web/assets/js/icons.js
+web/assets/js/modules/comparer.js
+web/assets/js/modules/decoder.js
+web/assets/js/modules/history.js
+web/assets/js/modules/intruder.js
+web/assets/js/modules/overview.js
+web/assets/js/modules/proxy.js
+web/assets/js/modules/repeater.js
+web/assets/js/modules/reports.js
+web/assets/js/modules/scanner.js
+web/assets/js/modules/scope.js
+web/assets/js/modules/sequencer.js
+web/assets/js/modules/settings.js
+web/assets/js/modules/websocket.js
+web/assets/js/websocket.js
+web/favicon.svg
+web/index.html
+
+=== FRONTEND MODULES & EXPORTS ===
+web/assets/js/modules/intruder.js:47:          ta.value = st.lists[i]; ta.addEventListener("input", () => { st.lists[i] = ta.value; count(); });
+web/assets/js/modules/intruder.js:60:    mode.addEventListener("change", () => { st.mode = mode.value; drawLists(); });
+web/assets/js/modules/intruder.js:61:    tpl.addEventListener("input", () => { st.template = tpl.value; drawLists(); });
+web/assets/js/modules/intruder.js:62:    for (const [el, k] of [[scheme, "scheme"], [host, "host"], [port, "port"], [conc, "conc"], [rps, "rps"], [tout, "timeout"]]) el.addEventListener("input", () => { st[k] = el.value; });
+web/assets/js/modules/scope.js:11:    type.addEventListener("change", () => { value.placeholder = HINT[type.value]; });
+web/assets/js/modules/scope.js:32:    value.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+web/assets/js/modules/scanner.js:27:    sevSel.addEventListener("change", load); scopeChk.addEventListener("change", load);
+web/assets/js/modules/settings.js:69:      try { const merge = !(await confirmBox("Ganti seluruh data dengan sesi ini? (Batal = gabungkan ke data yang ada)", "Ganti")); const r = await fetch("/api/sessions/import" + (merge ? "?replace=0" : ""), { method: "POST", headers: { "X-Requested-With": "exvolt", "Content-Type": "application/octet-stream" }, body: await f.arrayBuffer(), credentials: "same-origin" }); const j = await r.json(); if (!r.ok) throw new Error(j.error); toast(`Sesi diimpor (${j.imported.history} request)`); loadSessions(); } catch (x) { fail(x); }
+web/assets/js/modules/overview.js:122:    document.addEventListener("visibilitychange", start);
+web/assets/js/modules/decoder.js:17:    sel.addEventListener("change", sync); sync();
+web/assets/js/modules/repeater.js:74:    editor.addEventListener("input", () => { const t = cur(); t.raw = editor.value; fromRaw(t); methodSel.value = t.method; urlIn.value = t.url; persist(); });
+web/assets/js/modules/repeater.js:75:    methodSel.addEventListener("change", () => { const t = cur(); t.method = methodSel.value; applyUrl(t); editor.value = t.raw; persist(); });
+web/assets/js/modules/repeater.js:76:    urlIn.addEventListener("change", () => { const t = cur(); t.url = urlIn.value.trim(); applyUrl(t); editor.value = t.raw; persist(); });
+web/assets/js/modules/repeater.js:77:    followChk.addEventListener("change", () => { cur().follow = followChk.checked; persist(); });
+web/assets/js/modules/repeater.js:78:    timeoutIn.addEventListener("change", () => { cur().timeout = Number(timeoutIn.value) || 30; persist(); });
+web/assets/js/modules/repeater.js:92:    editor.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); send(); } });
+web/assets/js/modules/repeater.js:112:        dlg.addEventListener("cancel", closeIt); document.body.append(dlg); dlg.showModal();
+web/assets/js/modules/websocket.js:22:    q.addEventListener("input", debounce(loadMsgs, 300)); dir.addEventListener("change", loadMsgs); kind.addEventListener("change", loadMsgs);
+web/assets/js/modules/history.js:79:    search.addEventListener("input", debounce(reload, 300));
+web/assets/js/modules/history.js:80:    [mSel, sSel, srcSel, hostSel, scopeChk, bodyChk].forEach((el) => el.addEventListener("change", reload));
+web/assets/js/components/ui.js:10:      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+web/assets/js/components/ui.js:94:      dlg.append(form); dlg.addEventListener("cancel", () => done(null));
+web/assets/js/components/ui.js:115:    setTimeout(() => { addEventListener("click", close); addEventListener("keydown", esc); }, 0);
+web/assets/js/components/ui.js:125:    g.addEventListener("pointerdown", (e) => {
+web/assets/js/components/ui.js:130:      g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
+web/assets/js/components/ui.js:132:    g.addEventListener("keydown", (e) => {
+web/assets/js/components/ui.js:164:      if (c.sort) th.addEventListener("click", () => { sort = { key: c.sort, dir: sort.key === c.sort && sort.dir === "desc" ? "asc" : "desc" }; mark(); if (opts.onSort) opts.onSort(sort); });
+web/assets/js/components/ui.js:187:    tbody.addEventListener("click", (e) => {
+web/assets/js/components/ui.js:199:    if (opts.onContext) tbody.addEventListener("contextmenu", (e) => {
+web/assets/js/components/ui.js:228:    term.addEventListener("input", debounce(draw, 120));
+web/assets/js/app.js:116:    addEventListener("hashchange", route);
+web/assets/js/app.js:121:  document.addEventListener("DOMContentLoaded", boot);
+web/assets/js/api.js:15:    try { res = await fetch(path, init); }
+
+=== NAVIGATION & TOOL LABELS ===
+web/assets/js/modules/intruder.js:25:    const warn = h("div", { class: "warnbox", text: "Gunakan hanya pada target yang Anda miliki/berwenang uji. Target harus ada di Scope (include), dikonfirmasi manual, dan dibatasi concurrency/rate." });
+web/assets/js/modules/intruder.js:101:  EX.modules.intruder = { title: "Intruder", mount, unmount() { clearInterval(timer); timer = null; } };
+web/assets/js/modules/sequencer.js:36:    async function fromHistory(ids) {
+web/assets/js/modules/sequencer.js:54:    if (arg && arg.fromHistory) fromHistory(arg.fromHistory);
+web/assets/js/modules/scope.js:20:    ], { empty: "Scope kosong. Tanpa aturan include, semua aksi aktif (Repeater, Intruder, probe TLS) diblokir." });
+web/assets/js/modules/scope.js:48:  EX.modules.scope = { title: "Scope", mount };
+web/assets/js/modules/scanner.js:30:      const r = await modal("Probe TLS (handshake nyata)", [{ name: "host", label: "Host", placeholder: "localhost" }, { name: "port", label: "Port", type: "number", value: 443 }], "Probe");
+web/assets/js/modules/scanner.js:34:        probeOut.className = "okbox"; probeOut.textContent = `${p.host}:${p.port} · ${p.version} · ${p.cipher} · kunci ${p.key} · ${p.sig_hash} · berlaku s/d ${p.not_after.slice(0, 10)} · TLS1.0: ${p.legacy_protocols["TLSv1.0"]} · TLS1.1: ${p.legacy_protocols["TLSv1.1"]} · ${p.new_findings} temuan baru`;
+web/assets/js/modules/scanner.js:40:      btn("Probe TLS", { cls: "sm", icon: "shield", onclick: probe }),
+web/assets/js/modules/scanner.js:47:  const mod = { title: "Scanner Pasif", mount };
+web/assets/js/modules/settings.js:9:      ["proxy.verify_upstream", "Verifikasi sertifikat server tujuan", "bool"], ["proxy.intercept_only_in_scope", "Intercept hanya request dalam scope", "bool"],
+web/assets/js/modules/settings.js:12:      ["proxy.ignore_hosts", "Host tanpa intersepsi (satu per baris, wildcard)", "list", "Mis. *.bank.example — TLS dilewatkan tanpa dibongkar."]]],
+web/assets/js/modules/settings.js:14:    ["Jaringan (Repeater/Intruder/Scanner)", [
+web/assets/js/modules/settings.js:17:    ["Intruder", [["intruder.max_requests", "Maks request per serangan", "number"], ["intruder.max_concurrency", "Maks concurrency", "number"], ["intruder.max_rps", "Maks request/detik", "number"]]],
+web/assets/js/modules/settings.js:18:    ["Scanner", [["scanner.passive_enabled", "Analisis pasif otomatis", "bool"]]],
+web/assets/js/modules/overview.js:51:        h("div", { class: "panel" }, h("header", { text: "Temuan Scanner Pasif" }), h("div", { class: "body" }, gaugeSvg(total, risky),
+web/assets/js/modules/overview.js:63:        stat("Error koneksi", t.errors), stat("Pesan WebSocket", t.ws_messages), stat("Data respons", bytes(t.bytes)), stat("Aturan scope aktif", t.scope_rules));
+web/assets/js/modules/decoder.js:4:  const LABELS = { url: "URL", base64: "Base64", base64url: "Base64 URL-safe", hex: "Hex", html: "Entitas HTML", unicode: "Unicode (\\uXXXX)", json: "JSON (minify / pretty)", jwt: "JWT (inspeksi)", sha256: "SHA-256", sha512: "SHA-512", sha1: "SHA-1", md5: "MD5 (legacy)" };
+web/assets/js/modules/decoder.js:39:  EX.modules.decoder = { title: "Decoder", mount };
+web/assets/js/modules/proxy.js:17:    ], { empty: "Antrean kosong. Aktifkan Intercept untuk menahan request.", onSelect: (row) => select(row) });
+web/assets/js/modules/proxy.js:72:      { id: "intercept", label: "Intercept", render: () => EX.ui.split("v", h("div", { class: "reqbox" }, h("div", { class: "pane-head" }, h("h3", { text: "Antrean intercept" }), h("span", { class: "grow" }), fwdAll, dropAll), queueList.el),
+web/assets/js/modules/proxy.js:81:      h("label", { class: "chk" }, h("button", { class: "switch", role: "switch", id: "sw-intercept2", "aria-checked": String(!!p.intercept), "aria-label": "Intercept", onclick: async (e) => { try { EX.applyProxy(await EX.api.post("/api/proxy/intercept", { enabled: !EX.state.proxy.intercept })); e.target.setAttribute("aria-checked", String(EX.state.proxy.intercept)); } catch (x) { fail(x); } } }), "Intercept aktif")), tabsApi.el);
+web/assets/js/modules/repeater.js:32:      const t = blank(arg.label ? "Repeater " + arg.label : undefined);
+web/assets/js/modules/repeater.js:125:  EX.modules.repeater = { title: "Repeater", mount };
+web/assets/js/modules/comparer.js:45:  EX.modules.comparer = { title: "Comparer", mount };
+web/assets/js/modules/websocket.js:13:      { key: (r) => r.conn_id, empty: "Belum ada koneksi WebSocket tertangkap. Telusuri situs ber-WebSocket melalui proxy.", onSelect: (r) => { conn = String(r.conn_id); loadMsgs(); } });
+web/assets/js/modules/websocket.js:27:      btn("Kosongkan", { cls: "sm danger", icon: "trash", onclick: async () => { if (await confirmBox("Hapus semua pesan WebSocket?", "Hapus")) { try { await EX.api.del("/api/websocket/messages"); loadConns(); loadMsgs(); } catch (e) { fail(e); } } } })),
+web/assets/js/modules/websocket.js:33:  const mod = { title: "WebSocket", mount };
+web/assets/js/modules/history.js:6:  function toRepeater(d) {
+web/assets/js/modules/history.js:10:  EX.sendToComparer = (side, spec) => { EX.state.cmp = EX.state.cmp || {}; EX.state.cmp[side] = spec; toast(`Dikirim ke Comparer (${side === "left" ? "kiri" : "kanan"})`); };
+web/assets/js/modules/history.js:15:      { label: "Kirim ke Repeater", run: async () => { try { toRepeater(await get()); } catch (e) { fail(e); } } },
+web/assets/js/modules/history.js:16:      { label: "Comparer: respons → kiri", run: () => EX.sendToComparer("left", { history_id: row.id, part: "response", label: `#${row.id} respons` }) },
+web/assets/js/modules/history.js:17:      { label: "Comparer: respons → kanan", run: () => EX.sendToComparer("right", { history_id: row.id, part: "response", label: `#${row.id} respons` }) },
+web/assets/js/modules/history.js:18:      { label: "Comparer: request → kiri", run: () => EX.sendToComparer("left", { history_id: row.id, part: "request", label: `#${row.id} request` }) },
+web/assets/js/modules/history.js:19:      { label: "Comparer: request → kanan", run: () => EX.sendToComparer("right", { history_id: row.id, part: "request", label: `#${row.id} request` }) },
+web/assets/js/modules/history.js:21:      { label: "Ekstrak token ke Sequencer…", run: () => EX.go("sequencer", { fromHistory: ids }) },
+web/assets/js/modules/history.js:39:    const srcSel = h("select", { "aria-label": "Sumber" }, [["", "Semua sumber"], ["proxy", "Proxy"], ["repeater", "Repeater"]].map(([v, t]) => h("option", { value: v, text: t })));
+web/assets/js/modules/history.js:56:      { label: "Scope", width: "56px", render: (r) => (r.in_scope ? "✓" : "") },
+web/assets/js/modules/history.js:58:      multi: true, empty: "Belum ada riwayat. Jalankan proxy dan telusuri situs, atau kirim request dari Repeater.",
+web/assets/js/app.js:5:    ["overview", "Ringkasan"], ["proxy", "Proxy"], ["history", "Riwayat HTTP"], ["repeater", "Repeater"], ["intruder", "Intruder"],
+web/assets/js/app.js:6:    ["scanner", "Scanner"], ["sequencer", "Sequencer"], ["decoder", "Decoder"], ["comparer", "Comparer"], ["websocket", "WebSocket"],
+web/assets/js/app.js:7:    ["scope", "Scope"], ["reports", "Laporan"], ["settings", "Pengaturan"],
+web/assets/js/app.js:34:      h("label", { class: "chk", title: "Intercept request proxy" }, h("button", { class: "switch", id: "sw-intercept", role: "switch", "aria-checked": "false", "aria-label": "Intercept", onclick: toggleIntercept }), "Intercept"));
+web/assets/js/app.js:40:  async function toggleIntercept() {
+web/assets/js/websocket.js:2:/* Kanal real-time: WebSocket native; fallback otomatis ke Server-Sent Events bila WS tidak tersedia di server. */
+web/assets/js/websocket.js:22:    ws = new WebSocket(`${proto}//${location.host}/api/ws`);
+
+=== DATABASE SCHEMA ===
+
+DATABASE: data/exvolt.db
+
+TABLE: history
+CREATE TABLE history(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, scheme TEXT, host TEXT, port INTEGER,
+  method TEXT, url TEXT, path TEXT, status INTEGER DEFAULT 0, req_headers TEXT, req_body BLOB,
+  resp_headers TEXT, resp_body BLOB, content_type TEXT, resp_size INTEGER DEFAULT 0,
+  req_size INTEGER DEFAULT 0, duration_ms REAL DEFAULT 0, tls TEXT, error TEXT,
+  truncated INTEGER DEFAULT 0, in_scope INTEGER DEFAULT 0, source TEXT DEFAULT 'proxy', note TEXT)
+
+TABLE: findings
+CREATE TABLE findings(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, name TEXT, severity TEXT, confidence TEXT,
+  description TEXT, evidence TEXT, url TEXT, host TEXT, remediation TEXT, history_id INTEGER,
+  fkey TEXT UNIQUE)
+
+TABLE: ws_messages
+CREATE TABLE ws_messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, conn_id INTEGER, ts REAL, direction TEXT, opcode INTEGER,
+  kind TEXT, payload BLOB, length INTEGER, host TEXT, url TEXT)
+
+TABLE: scope_rules
+CREATE TABLE scope_rules(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, type TEXT, value TEXT, enabled INTEGER DEFAULT 1, note TEXT)
+
+TABLE: token_sets
+CREATE TABLE token_sets(name TEXT PRIMARY KEY, source TEXT, created REAL)
+
+TABLE: tokens
+CREATE TABLE tokens(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, set_name TEXT, value TEXT, ts REAL, history_id INTEGER)
+
+TABLE: saved_requests
+CREATE TABLE saved_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, ts REAL, data TEXT)
+
+TABLE: repeater_log
+CREATE TABLE repeater_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, data TEXT)
+
+TABLE: reports
+CREATE TABLE reports(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, ts REAL, summary TEXT, html_file TEXT, json_file TEXT)
+
+=== TEST FILES ===
+./tests/test_api_security.py
+./tests/test_comparer.py
+./tests/test_decoder.py
+./tests/test_frontend_smoke.py
+./tests/test_proxy.py
+./tests/test_repeater_intruder.py
+./tests/test_scanner.py
+./tests/test_scope.py
+./tests/test_sequencer_session_report.py
+
+=== CONFIG KEYS ONLY (NO VALUES) ===
+server
+server.host
+server.port
+server.auth_token
+proxy
+proxy.host
+proxy.port
+proxy.allow_remote
+proxy.autostart
+proxy.intercept
+proxy.intercept_only_in_scope
+proxy.intercept_timeout
+proxy.mitm_https
+proxy.verify_upstream
+proxy.ignore_hosts
+proxy.ignore_hosts[]
+proxy.only_in_scope_history
+proxy.max_body_bytes
+proxy.upstream_timeout
+history
+history.max_entries
+network
+network.enforce_scope
+network.blocked_hosts
+network.blocked_hosts[]
+network.request_timeout
+network.max_response_bytes
+intruder
+intruder.max_requests
+intruder.max_concurrency
+intruder.max_rps
+session
+session.autosave
+session.autosave_minutes
+scanner
+scanner.passive_enabled
+
+=== AUDIT COMPLETE ===
